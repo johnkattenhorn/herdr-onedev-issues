@@ -734,41 +734,45 @@ test("herdrIO probe: an unexpected answer or a failing shell throws", async () =
 const OD = { kind: "onedev", host: "http://h", project: "g/p", projectId: 1 };
 const LAST = { kind: "onedev", host: "http://h", project: "g/last", projectId: 2 };
 const NO = { kind: "not-onedev", reason: "no-origin" };
-const KIDS = ["files", "changes", "issues", "onedev-issues"];
 
-test("chooseView: a onedev folder selects onedev-issues for that project", () => {
-  assert.deepEqual(chooseView(OD, KIDS, LAST), { action: "show", child: "onedev-issues", project: OD });
-  assert.deepEqual(chooseView(OD, KIDS, null), { action: "show", child: "onedev-issues", project: OD });
-  assert.deepEqual(chooseView(OD, ["files"], null), { action: "show", child: "onedev-issues", project: OD });
+test("chooseView: a onedev folder selects onedev-issues for that project, in either mode", () => {
+  for (const shared of [true, false]) {
+    assert.deepEqual(chooseView(OD, shared, LAST), { action: "show", child: "onedev-issues", project: OD });
+    assert.deepEqual(chooseView(OD, shared, null), { action: "show", child: "onedev-issues", project: OD });
+  }
 });
 
-test("chooseView: a not-onedev folder selects the upstream issues child when the layout has it", () => {
-  assert.deepEqual(chooseView(NO, KIDS, LAST), { action: "show", child: "issues", project: LAST });
-  assert.deepEqual(chooseView(NO, KIDS, null), { action: "show", child: "issues", project: null });
+test("chooseView: shared, a not-onedev folder selects the upstream issues child", () => {
+  assert.deepEqual(chooseView(NO, true, LAST), { action: "show", child: "issues", project: LAST });
+  assert.deepEqual(chooseView(NO, true, null), { action: "show", child: "issues", project: null });
 });
 
-test("chooseView: a not-onedev folder without an upstream child keeps the last project", () => {
-  assert.deepEqual(chooseView(NO, ["files", "onedev-issues"], LAST), { action: "show", child: "onedev-issues", project: LAST });
+test("chooseView: separate, a not-onedev folder keeps the OneDev panel and the last project", () => {
+  assert.deepEqual(chooseView(NO, false, LAST), { action: "show", child: "onedev-issues", project: LAST });
 });
 
-test("chooseView: a not-onedev folder in a space that never had a project gives the empty state", () => {
-  assert.deepEqual(chooseView(NO, ["files", "onedev-issues"], null), { action: "show", child: "onedev-issues", project: null });
+test("chooseView: separate, a not-onedev folder in a space that never had a project gives the empty state", () => {
+  assert.deepEqual(chooseView(NO, false, null), { action: "show", child: "onedev-issues", project: null });
 });
 
 test("chooseView: every not-onedev reason behaves the same", () => {
   for (const reason of ["no-git", "no-origin", "unknown-host", "no-project"]) {
-    assert.deepEqual(chooseView({ kind: "not-onedev", reason }, KIDS, LAST), { action: "show", child: "issues", project: LAST });
+    assert.deepEqual(chooseView({ kind: "not-onedev", reason }, true, LAST), { action: "show", child: "issues", project: LAST });
+    assert.deepEqual(chooseView({ kind: "not-onedev", reason }, false, LAST), { action: "show", child: "onedev-issues", project: LAST });
   }
 });
 
-test("chooseView: no verdict yet keeps the current view and the last project", () => {
-  assert.deepEqual(chooseView(null, KIDS, LAST), { action: "keep" });
-  assert.deepEqual(chooseView(undefined, KIDS, null), { action: "keep" });
+test("chooseView: a failed lookup goes to the GitHub panel when shared, to the OneDev panel when separate", () => {
+  assert.deepEqual(chooseView({ kind: "failed" }, true, LAST), { action: "show", child: "issues", project: LAST });
+  assert.deepEqual(chooseView({ kind: "failed" }, true, null), { action: "show", child: "issues", project: null });
+  assert.deepEqual(chooseView({ kind: "failed" }, false, LAST), { action: "show", child: "onedev-issues", project: LAST });
 });
 
-test("chooseView: junk child ids do not crash", () => {
-  assert.deepEqual(chooseView(NO, undefined, LAST), { action: "show", child: "onedev-issues", project: LAST });
-  assert.deepEqual(chooseView(NO, "issues", LAST), { action: "show", child: "onedev-issues", project: LAST });
+test("chooseView: no verdict yet keeps the current view, in either mode", () => {
+  for (const shared of [true, false]) {
+    assert.deepEqual(chooseView(null, shared, LAST), { action: "keep" });
+    assert.deepEqual(chooseView(undefined, shared, null), { action: "keep" });
+  }
 });
 
 const cacheOf = (...rs) => ({ issues: Object.fromEntries(rs.map((r) => [String(r.number), r])) });

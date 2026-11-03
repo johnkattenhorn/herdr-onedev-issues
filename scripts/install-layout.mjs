@@ -6,18 +6,34 @@ import { fileURLToPath } from "node:url";
 
 const MOD = "onedev-issues";
 const BUTTON_ID = "onedev-issues-button";
+const GITHUB_BUTTON_ID = "issues-button";
+const GITHUB_PANEL_ID = "issues";
 const buttonContent = () => ({ mod: MOD, props: { button: true } });
 
+// The upstream GitHub mod's tab-bar block, as layouts/main-issues.json has it at
+// https://github.com/jankeesvw/herdr-issues/commit/dd1d0f4aaed35ce2b75bf30dd925941d46ff3d0a
+const upstreamButton = () => ({
+  id: GITHUB_BUTTON_ID,
+  type: "block",
+  size: { px: 78 },
+  window_drag: true,
+  content: { mod: "issues", props: { button: true } },
+});
+
+/** @typedef {"separate" | "replace" | "remove"} Mode */
+
 function findNode(node, id) {
+  if (node === null || typeof node !== "object") return undefined;
   if (node.id === id) return node;
-  for (const child of node.children ?? []) {
+  for (const child of Array.isArray(node.children) ? node.children : []) {
     const hit = findNode(child, id);
     if (hit) return hit;
   }
   return undefined;
 }
 
-export function installLayout(input) {
+/** @param {unknown} input @param {{ mode?: Mode }} [options] */
+export function installLayout(input, { mode = "separate" } = {}) {
   if (input === null || typeof input !== "object" || Array.isArray(input)) {
     return { ok: false, error: "layout must be a JSON object" };
   }
@@ -35,28 +51,67 @@ export function installLayout(input) {
     return { ok: false, error: "panel-body children must be an array" };
   }
 
-  const changes = [];
   const bar = (tabBar.children ??= []);
-  const old = bar.findIndex((c) => c?.id === "issues-button");
-  if (!bar.some((c) => c?.id === BUTTON_ID)) {
-    if (old >= 0) {
-      bar[old] = { ...bar[old], id: BUTTON_ID, content: buttonContent() };
-      changes.push(`tab-bar: replaced issues-button with ${BUTTON_ID}`);
-    } else {
-      bar.push({ id: BUTTON_ID, type: "block", size: { px: 78 }, window_drag: true, content: buttonContent() });
-      changes.push(`tab-bar: added ${BUTTON_ID}`);
+  const panels = (panelBody.children ??= []);
+  const indexIn = (list, id) => list.findIndex((c) => c?.id === id);
+  const hasGithubPanel = indexIn(panels, GITHUB_PANEL_ID) >= 0;
+  const changes = [];
+
+  if (mode === "remove") {
+    const own = indexIn(bar, BUTTON_ID);
+    if (own >= 0) {
+      // The OneDev button holds the GitHub slot when the upstream panel is there and its button is not.
+      if (hasGithubPanel && indexIn(bar, GITHUB_BUTTON_ID) < 0) {
+        bar[own] = upstreamButton();
+        changes.push(`tab-bar: replaced ${BUTTON_ID} with ${GITHUB_BUTTON_ID}`);
+      } else {
+        bar.splice(own, 1);
+        changes.push(`tab-bar: removed ${BUTTON_ID}`);
+      }
     }
+    const child = indexIn(panels, MOD);
+    if (child >= 0) {
+      panels.splice(child, 1);
+      changes.push(`panel-body: removed ${MOD}`);
+      if (panelBody.active === MOD) {
+        if (panels[0]?.id !== undefined) panelBody.active = panels[0].id;
+        else delete panelBody.active;
+      }
+    }
+    return { ok: true, layout, changes };
   }
 
-  const panels = (panelBody.children ??= []);
-  if (!panels.some((c) => c?.id === MOD)) {
+  if (mode === "replace") {
+    if (!hasGithubPanel) {
+      return { ok: false, error: `--replace-github-button needs the GitHub Issues mod's panel: no ${GITHUB_PANEL_ID} child in panel-body` };
+    }
+    const slot = indexIn(bar, GITHUB_BUTTON_ID);
+    const own = indexIn(bar, BUTTON_ID);
+    if (slot < 0 && own < 0) {
+      return { ok: false, error: `--replace-github-button needs the GitHub Issues mod's button: no ${GITHUB_BUTTON_ID} in tab-bar` };
+    }
+    if (slot >= 0) {
+      const taken = { ...bar[slot], id: BUTTON_ID, content: buttonContent() };
+      if (own >= 0) {
+        bar.splice(own, 1);
+        changes.push(`tab-bar: removed the separate ${BUTTON_ID}`);
+      }
+      bar[bar.findIndex((c) => c?.id === GITHUB_BUTTON_ID)] = taken;
+      changes.push(`tab-bar: replaced ${GITHUB_BUTTON_ID} with ${BUTTON_ID}`);
+    }
+  } else if (indexIn(bar, BUTTON_ID) < 0) {
+    bar.push({ id: BUTTON_ID, type: "block", size: { px: 78 }, window_drag: true, content: buttonContent() });
+    changes.push(`tab-bar: added ${BUTTON_ID}`);
+  }
+
+  if (indexIn(panels, MOD) < 0) {
     panels.push({ id: MOD, type: "block", content: { mod: MOD } });
     changes.push(`panel-body: added ${MOD}`);
   }
   return { ok: true, layout, changes };
 }
 
-async function installFile(path) {
+async function installFile(path, options) {
   const target = await realpath(path);
   let layout;
   try {
@@ -64,7 +119,7 @@ async function installFile(path) {
   } catch (e) {
     return { ok: false, error: `${target}: ${e.message}` };
   }
-  const result = installLayout(layout);
+  const result = installLayout(layout, options);
   if (!result.ok || result.changes.length === 0) return result;
   await access(target, constants.W_OK);
   const mode = (await stat(target)).mode & 0o7777;
@@ -80,13 +135,27 @@ async function installFile(path) {
   return result;
 }
 
+const USAGE = "usage: node scripts/install-layout.mjs [--replace-github-button | --remove] <layout.json>";
+
+/** @param {string[]} argv */
+export function parseArgs(argv) {
+  const flags = argv.filter((a) => a.startsWith("--"));
+  const files = argv.filter((a) => !a.startsWith("--"));
+  if (files.length !== 1) return null;
+  if (flags.some((f) => f !== "--replace-github-button" && f !== "--remove")) return null;
+  if (flags.length > 1) return null;
+  const mode = flags[0] === "--remove" ? "remove" : flags[0] === "--replace-github-button" ? "replace" : "separate";
+  return { mode, file: files[0] };
+}
+
 async function main(argv) {
-  if (argv.length !== 1) {
-    console.error("usage: node scripts/install-layout.mjs <layout.json>");
+  const args = parseArgs(argv);
+  if (!args) {
+    console.error(USAGE);
     return 2;
   }
   try {
-    const result = await installFile(argv[0]);
+    const result = await installFile(args.file, { mode: args.mode });
     if (!result.ok) {
       console.error(`install-layout: ${result.error}`);
       return 1;

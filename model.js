@@ -13,7 +13,7 @@ import { SORTS, chooseView, displayText, stateTabs } from "./cache.js";
 /** @typedef {{ space: string, cwd: string, on: string | null, key: CtxKey }} FocusCtx */
 
 /**
- * @typedef {{ mode: "hidden" | "onedev-issues" | "issues", columnShown: boolean, active: string | null, childIds: string[] }} PanelSlot
+ * @typedef {{ mode: "hidden" | "onedev-issues" | "issues", columnShown: boolean, active: string | null, childIds: string[], shared: boolean }} PanelSlot
  */
 
 /**
@@ -118,11 +118,11 @@ function hasPanelBlock(node) {
  */
 export function readPanel(layoutRoot) {
   /** @type {PanelSlot} */
-  const hidden = { mode: "hidden", columnShown: false, active: null, childIds: [] };
+  const hidden = { mode: "hidden", columnShown: false, active: null, childIds: [], shared: false };
   if (!isObject(layoutRoot)) return hidden;
   const body = findNode(layoutRoot, "panel-body");
   if (!body) {
-    return hasPanelBlock(layoutRoot) ? { mode: "onedev-issues", columnShown: true, active: null, childIds: [] } : hidden;
+    return hasPanelBlock(layoutRoot) ? { mode: "onedev-issues", columnShown: true, active: null, childIds: [], shared: false } : hidden;
   }
   const column = findNode(layoutRoot, "panel");
   const columnShown = column?.hidden !== true;
@@ -131,7 +131,11 @@ export function readPanel(layoutRoot) {
   const childIds = kids.map((c) => (isObject(c) ? c.id : null)).filter((id) => typeof id === "string");
   const active = typeof body.active === "string" ? body.active : (childIds[0] ?? null);
   const mode = !columnShown ? "hidden" : active === "onedev-issues" || active === "issues" ? active : "hidden";
-  return { mode, columnShown, active, childIds };
+  const bar = findNode(layoutRoot, "tab-bar");
+  const barIds = Array.isArray(bar?.children) ? bar.children.map((c) => (isObject(c) ? c.id : null)) : [];
+  // Shared mode: the upstream GitHub panel is in the layout and this mod's button took its button's slot.
+  const shared = childIds.includes("issues") && !barIds.includes("issues-button");
+  return { mode, columnShown, active, childIds, shared };
 }
 
 /** @param {PanelSlot} slot @returns {boolean} */
@@ -139,9 +143,13 @@ export function isPanelShown(slot) {
   return slot.mode === "onedev-issues";
 }
 
-/** @param {PanelSlot} slot @returns {boolean} */
+/**
+ * Whether this mod's button counts as pressed. Shared, the button stands for both panels. With
+ * separate buttons the GitHub panel belongs to the GitHub mod's button, so it is not ours.
+ * @param {PanelSlot} slot @returns {boolean}
+ */
 export function slotShowsIssues(slot) {
-  return slot.mode !== "hidden";
+  return slot.shared ? slot.mode !== "hidden" : slot.mode === "onedev-issues";
 }
 
 /**
@@ -153,17 +161,18 @@ export function routeStep({ ctx, slot, checks, lastProject, opening, configError
   const check = ctx ? checks[ctx.key] : undefined;
   const verdict = check?.kind === "known" ? check.verdict : check?.kind === "asking" ? check.prior : null;
   const last = (space !== null ? lastProject[space] : null) ?? null;
-  const view = chooseView(verdict, slot.childIds, last);
+  const failed = check?.kind === "failed";
+  const view = chooseView(verdict ?? (failed ? { kind: "failed" } : null), slot.shared, last);
   const project = view.action === "show" ? view.project : last;
   const child = view.action === "show" ? view.child : "onedev-issues";
 
   const active = slot.mode !== "hidden" || opening;
   const stale = check === undefined || (check.kind === "known" && now - check.at > VERDICT_MAX_AGE);
   const wantLookup = ctx !== null && configError === null && stale && active;
-  const settled = verdict !== null || check?.kind === "failed" || ctx === null || configError !== null;
+  const settled = verdict !== null || failed || ctx === null || configError !== null;
 
   const canSelect = slot.childIds.includes(child) && child !== slot.active;
-  const switching = slot.columnShown && slot.mode !== "hidden" && view.action === "show";
+  const switching = slot.shared && slot.columnShown && slot.mode !== "hidden" && view.action === "show";
   const opens = opening && settled;
   const select = canSelect && (switching || opens) ? child : null;
 

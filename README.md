@@ -6,7 +6,7 @@ A [Herdr](https://herdr.dev) mod that lists the OneDev issues of the repository 
 
 ## What it does
 
-- Adds an **Issues** button to the tab bar, next to Files and Changes. It opens a side panel.
+- Adds an **Issues** button to the tab bar, next to Files and Changes. It opens a side panel. The mod works on its own: it needs `odev` and nothing else.
 - The panel follows the focused terminal. It reads the folder's `origin` remote, asks `odev` which OneDev project that is, and lists that project's issues. A space remembers its project, so a folder outside OneDev keeps the last one. A space that never had a project shows an empty state, never an error.
 - Issues show at once from a cache and refresh in the background. Switch between the states the project's issues use, show only your own, and sort five ways.
 - A `#123` or `team/app#123` that the terminal prints shows at the top of the list, under "In this terminal".
@@ -35,7 +35,7 @@ Herdr keeps mods and layouts in `~/.config/herdr-app` (set `HERDR_APP_HOME` to u
 
 2. Put the button and the panel in a layout. Either:
 
-   - **Your own layout** that has a `tab-bar` row and a `panel-body` stack (a clone of Herdr's `main` that you edited, for example): run the layout step on its file. It adds the button and the panel and prints what it changed. If the layout has the upstream mod's `issues-button`, it swaps that button for this one in the same place and leaves the upstream panel in the layout. A second run prints `unchanged`.
+   - **Your own layout** that has a `tab-bar` row and a `panel-body` stack (a clone of Herdr's `main` that you edited, for example): run the layout step on its file. It adds a button `onedev-issues-button` to the tab bar and a panel `onedev-issues` to the side panel, and prints what it changed. It never changes or removes another mod's blocks. A second run prints `unchanged`.
 
      ```sh
      node scripts/install-layout.mjs ~/.config/herdr-app/layouts/my-main.json
@@ -51,6 +51,30 @@ Herdr keeps mods and layouts in `~/.config/herdr-app` (set `HERDR_APP_HOME` to u
 3. Open a terminal in a clone of a OneDev project and press **Issues**.
 
 Saving a mod file reloads it. A dialog that was open at that moment shows "interrupted": close it and open it again.
+
+## Using it with the GitHub Issues mod
+
+If you also use [herdr-issues](https://github.com/jankeesvw/herdr-issues) by Jankees van Woezik, which lists GitHub issues, install both mods. This README was written against [commit `dd1d0f4`](https://github.com/jankeesvw/herdr-issues/commit/dd1d0f4aaed35ce2b75bf30dd925941d46ff3d0a) of that mod (panel child `issues`, button `issues-button`).
+
+Run the default layout step on a layout that has the GitHub mod. You get two buttons side by side. Each opens its own panel: this mod's button shows the OneDev panel in any folder, and the GitHub mod's button shows the GitHub panel.
+
+For one button that switches, add `--replace-github-button`:
+
+```sh
+node scripts/install-layout.mjs --replace-github-button ~/.config/herdr-app/layouts/my-main.json
+```
+
+This mod's button then takes the GitHub button's place in the tab bar, and the GitHub panel stays in the layout. A folder that is a OneDev project opens the OneDev panel. Any other folder opens the GitHub panel, and so does a folder where the `odev` lookup fails (`odev` missing or broken). The OneDev panel still shows the error when you open it. The step refuses to run on a layout that has no GitHub `issues` panel. Run it on a layout that already has the separate button and it converts that layout: one OneDev button is left, in the GitHub slot.
+
+## Uninstall
+
+Remove the button and the panel from a layout:
+
+```sh
+node scripts/install-layout.mjs --remove ~/.config/herdr-app/layouts/my-main.json
+```
+
+If this mod's button had taken the GitHub button's place, `--remove` puts the GitHub mod's `issues-button` back in that place, as it is at commit `dd1d0f4`. A second run prints `unchanged`. Then delete the mod folder `~/.config/herdr-app/mods/onedev-issues`. If you installed `main-onedev-issues` as a layout, switch to another layout first.
 
 ## Configuration
 

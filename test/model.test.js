@@ -8,7 +8,7 @@ import * as model from "../model.js";
 import { verdict } from "./helpers.js";
 
 const {
-  beginCheck, bodyKind, contextKey, endCheck, focusContext, mentionRows, parseChecks, parseCommand, parseContext, parsePrefs,
+  beginCheck, bodyKind, slotShowsIssues, contextKey, endCheck, focusContext, mentionRows, parseChecks, parseCommand, parseContext, parsePrefs,
   parseSpaces, readPanel, rememberProject, routeStep, selectRow, serializeChecks, visibleRows, withPanels, effectiveState,
 } = model;
 
@@ -29,7 +29,7 @@ const cacheOf = (rows, over = {}) => ({
 
 test("readPanel: null, a string and an array are hidden", () => {
   for (const x of [null, undefined, "x", 4, []]) {
-    assert.deepEqual(readPanel(x), { mode: "hidden", columnShown: false, active: null, childIds: [] });
+    assert.deepEqual(readPanel(x), { mode: "hidden", columnShown: false, active: null, childIds: [], shared: false });
   }
 });
 
@@ -39,20 +39,37 @@ test("readPanel: a layout with no panel-body is hidden, unless the panel block s
   const button = { id: "root", children: [{ id: "b", content: { mod: "onedev-issues", props: { button: true } } }] };
   assert.equal(readPanel(button).mode, "hidden");
   const block = { id: "root", children: [{ id: "p", content: { mod: "onedev-issues" } }] };
-  assert.deepEqual(readPanel(block), { mode: "onedev-issues", columnShown: true, active: null, childIds: [] });
+  assert.deepEqual(readPanel(block), { mode: "onedev-issues", columnShown: true, active: null, childIds: [], shared: false });
 });
 
 test("readPanel: the committed layout starts hidden with the panel child present", () => {
   const slot = readPanel(json("layouts/main-onedev-issues.json"));
-  assert.deepEqual(slot, { mode: "hidden", columnShown: false, active: "files", childIds: ["files", "changes", "onedev-issues"] });
+  assert.deepEqual(slot, { mode: "hidden", columnShown: false, active: "files", childIds: ["files", "changes", "onedev-issues"], shared: false });
 });
 
-test("readPanel: my-main.json after install-layout has both issues children", () => {
+test("readPanel: my-main.json after the default install has both issues children and separate buttons", () => {
   const r = installLayout(json("test/fixtures/my-main.json"));
   assert.equal(r.ok, true);
   const slot = readPanel(r.layout);
   assert.deepEqual(slot.childIds, ["files", "changes", "issues", "onedev-issues"]);
   assert.equal(slot.mode, "hidden");
+  assert.equal(slot.shared, false);
+});
+
+test("readPanel: shared only when the upstream panel is there and its button is gone", () => {
+  const src = json("test/fixtures/my-main.json");
+  const replaced = installLayout(src, { mode: "replace" });
+  assert.equal(readPanel(replaced.layout).shared, true);
+  assert.equal(readPanel(installLayout(replaced.layout, { mode: "remove" }).layout).shared, false);
+  assert.equal(readPanel(installLayout(src, { mode: "replace" }).layout).childIds.includes("issues"), true);
+  const noPanel = structuredClone(replaced.layout);
+  const body = find(noPanel, "panel-body");
+  body.children = body.children.filter((c) => c.id !== "issues");
+  assert.equal(readPanel(noPanel).shared, false);
+  const own = installLayout(src);
+  assert.equal(readPanel(own.layout).shared, false);
+  find(own.layout, "tab-bar").children = [];
+  assert.equal(readPanel(own.layout).shared, true);
 });
 
 test("readPanel: shown column and active child give onedev-issues, issues or hidden", () => {
@@ -70,12 +87,12 @@ test("readPanel: shown column and active child give onedev-issues, issues or hid
 
 test("readPanel: wrong-typed children and active do not throw", () => {
   const l = { id: "panel-body", active: 7, children: [null, 3, { id: 5 }, { id: "files" }] };
-  assert.deepEqual(readPanel(l), { mode: "hidden", columnShown: true, active: "files", childIds: ["files"] });
+  assert.deepEqual(readPanel(l), { mode: "hidden", columnShown: true, active: "files", childIds: ["files"], shared: false });
   assert.equal(readPanel({ id: "panel-body", children: "x" }).mode, "hidden");
 });
 
 const ctx = (cwd, space = "s1", on = null) => ({ space, cwd, on, key: contextKey(cwd, on) });
-const slot = (mode, active, over = {}) => ({ mode, columnShown: mode !== "hidden", active, childIds: ["files", "changes", "issues", "onedev-issues"], ...over });
+const slot = (mode, active, over = {}) => ({ mode, columnShown: mode !== "hidden", active, childIds: ["files", "changes", "issues", "onedev-issues"], shared: true, ...over });
 const HIDDEN = slot("hidden", "files", { columnShown: false });
 const NOW = Date.UTC(2026, 10, 3, 12, 0, 0);
 const MIN = 60_000;
@@ -85,6 +102,8 @@ const base = (over) => ({
 const A = ctx("/a"), B = ctx("/b");
 const known = (v, at = NOW) => ({ kind: "known", verdict: v, at });
 const SHOWN = slot("onedev-issues", "onedev-issues");
+const SEP_HIDDEN = slot("hidden", "files", { columnShown: false, shared: false });
+const SEP_GITHUB = slot("issues", "issues", { shared: false });
 
 const ROUTES = [
   ["hidden, no verdict: no lookup, no action, not checking", base({}), { lookups: [], select: null, show: false, opened: false, checking: true }],
@@ -102,13 +121,23 @@ const ROUTES = [
   ["click, verdict cached: select, show and open at once", base({ opening: true, checks: { [A.key]: known(V) } }), { lookups: [], select: "onedev-issues", show: true, opened: true, checking: false }],
   ["click, stale verdict: open on it at once and ask again", base({ opening: true, checks: { [A.key]: known(V, 0) } }), { lookups: [A], select: "onedev-issues", show: true, opened: true, checking: false }],
   ["click, no verdict: look up and wait", base({ opening: true }), { lookups: [A], select: null, show: false, opened: false, checking: true }],
-  ["click, lookup failed: open onedev-issues and show the error", base({ opening: true, checks: { [A.key]: { kind: "failed", message: "boom" } } }), { lookups: [], select: "onedev-issues", show: true, opened: true, checking: false, error: "boom" }],
-  ["click, no focus at all: open the empty state", base({ opening: true, ctx: null }), { lookups: [], select: "onedev-issues", show: true, opened: true, checking: false }],
+    ["click, no focus at all: open the empty state", base({ opening: true, ctx: null }), { lookups: [], select: "onedev-issues", show: true, opened: true, checking: false }],
   ["click, github verdict: open the issues child", base({ opening: true, checks: { [A.key]: known(NOT) } }), { lookups: [], select: "issues", show: true, opened: true, checking: false }],
   ["click, column already shown on Files: select without show", base({ opening: true, slot: { ...HIDDEN, columnShown: true }, checks: { [A.key]: known(V) } }), { lookups: [], select: "onedev-issues", show: false, opened: true, checking: false }],
   ["click, column hidden but onedev-issues already active: show only", base({ opening: true, slot: { ...HIDDEN, active: "onedev-issues" }, checks: { [A.key]: known(V) } }), { lookups: [], select: null, show: true, opened: true, checking: false }],
   ["bad config: no lookups, the config message is published", base({ slot: SHOWN, configError: "bad path" }), { lookups: [], select: null, show: false, opened: false, checking: false, error: "bad path" }],
-  ["no issues child in the layout: never select it", base({ slot: slot("onedev-issues", "onedev-issues", { childIds: ["files", "onedev-issues"] }), checks: { [A.key]: known(NOT) } }), { lookups: [], select: null, show: false, opened: false, checking: false }],
+  ["shared, lookup failed, onedev-issues shown: switch to the GitHub panel, keep the error", base({ slot: SHOWN, checks: { [A.key]: { kind: "failed", message: "odev: not found" } } }), { lookups: [], select: "issues", show: false, opened: false, checking: false, error: "odev: not found" }],
+  ["shared, click, lookup failed: open the GitHub panel", base({ opening: true, checks: { [A.key]: { kind: "failed", message: "boom" } } }), { lookups: [], select: "issues", show: true, opened: true, checking: false, error: "boom" }],
+  ["no issues child, click, lookup failed: open the OneDev panel with the error", base({ opening: true, slot: slot("hidden", "files", { columnShown: false, childIds: ["files", "onedev-issues"], shared: false }), checks: { [A.key]: { kind: "failed", message: "boom" } } }), { lookups: [], select: "onedev-issues", show: true, opened: true, checking: false, error: "boom" }],
+  ["no issues child, OneDev panel shown, lookup failed: stay, show the error", base({ slot: slot("onedev-issues", "onedev-issues", { childIds: ["files", "onedev-issues"], shared: false }), checks: { [A.key]: { kind: "failed", message: "boom" } } }), { lookups: [], select: null, show: false, opened: false, checking: false, error: "boom" }],
+  ["separate, click, OneDev folder: open the OneDev panel", base({ opening: true, slot: SEP_HIDDEN, checks: { [A.key]: known(V) } }), { lookups: [], select: "onedev-issues", show: true, opened: true, checking: false }],
+  ["separate, click, not-onedev folder: open the OneDev panel, not the GitHub one", base({ opening: true, slot: SEP_HIDDEN, checks: { [A.key]: known(NOT) } }), { lookups: [], select: "onedev-issues", show: true, opened: true, checking: false }],
+  ["separate, click, lookup failed: open the OneDev panel and show the error", base({ opening: true, slot: SEP_HIDDEN, checks: { [A.key]: { kind: "failed", message: "boom" } } }), { lookups: [], select: "onedev-issues", show: true, opened: true, checking: false, error: "boom" }],
+  ["separate, click, no verdict: look up and wait", base({ opening: true, slot: SEP_HIDDEN }), { lookups: [A], select: null, show: false, opened: false, checking: true }],
+  ["separate, GitHub panel shown, OneDev folder: never pull the panel away", base({ slot: SEP_GITHUB, checks: { [A.key]: known(V) } }), { lookups: [], select: null, show: false, opened: false, checking: false }],
+  ["separate, GitHub panel shown, not-onedev folder: stay", base({ slot: SEP_GITHUB, checks: { [A.key]: known(NOT) } }), { lookups: [], select: null, show: false, opened: false, checking: false }],
+  ["separate, OneDev panel shown, not-onedev folder: stay on the OneDev panel", base({ slot: slot("onedev-issues", "onedev-issues", { shared: false }), checks: { [A.key]: known(NOT) } }), { lookups: [], select: null, show: false, opened: false, checking: false }],
+  ["no issues child in the layout: never select it", base({ slot: slot("onedev-issues", "onedev-issues", { childIds: ["files", "onedev-issues"], shared: false }), checks: { [A.key]: known(NOT) } }), { lookups: [], select: null, show: false, opened: false, checking: false }],
 ];
 
 for (const [name, input, want] of ROUTES) {
@@ -366,4 +395,10 @@ test("spaces memo and context and prefs parse at the boundary", () => {
   assert.deepEqual(parsePrefs("{"), prefs());
   assert.deepEqual(parsePrefs(JSON.stringify({ state: "Closed", mine: true, sort: "oldest", selected: 9, menu: true })), prefs({ state: "Closed", mine: true, sort: "oldest" }));
   assert.equal(parsePrefs(JSON.stringify({ sort: "bogus", state: 4, mine: "yes" })).sort, "newest");
+});
+
+test("slotShowsIssues: shared, either issues panel counts; separate, only the OneDev panel", () => {
+  const mk = (mode, shared) => ({ mode, columnShown: mode !== "hidden", active: mode, childIds: [], shared });
+  assert.deepEqual(["hidden", "onedev-issues", "issues"].map((m) => slotShowsIssues(mk(m, true))), [false, true, true]);
+  assert.deepEqual(["hidden", "onedev-issues", "issues"].map((m) => slotShowsIssues(mk(m, false))), [false, true, false]);
 });

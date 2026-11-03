@@ -422,15 +422,18 @@ export function herdrIO({ exec, fs }) {
 /** @typedef {{ action: "keep" } | { action: "show", child: "onedev-issues" | "issues", project: OnedevProject | null }} View */
 
 /**
- * @param {Verdict | null} verdict
- * @param {string[]} childIds
+ * Pick the panel child for a folder. `shared` is true when this mod's button holds the GitHub
+ * Issues button's slot: only then does a folder outside OneDev (or a failed lookup) go to the
+ * GitHub `issues` panel. With separate buttons the OneDev button always shows the OneDev panel.
+ * @param {Verdict | { kind: "failed" } | null | undefined} verdict
+ * @param {boolean} shared
  * @param {OnedevProject | null} lastProject
  * @returns {View}
  */
-export function chooseView(verdict, childIds, lastProject) {
+export function chooseView(verdict, shared, lastProject) {
   if (verdict?.kind === "onedev") return { action: "show", child: "onedev-issues", project: verdict };
-  if (verdict?.kind !== "not-onedev") return { action: "keep" };
-  if (Array.isArray(childIds) && childIds.includes("issues")) return { action: "show", child: "issues", project: lastProject };
+  if (verdict?.kind !== "not-onedev" && verdict?.kind !== "failed") return { action: "keep" };
+  if (shared) return { action: "show", child: "issues", project: lastProject };
   return { action: "show", child: "onedev-issues", project: lastProject };
 }
 
