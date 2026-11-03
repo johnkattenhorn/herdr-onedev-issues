@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildLayout } from "../scripts/build-layout.mjs";
 import { installLayout, parseArgs } from "../scripts/install-layout.mjs";
-import { readPanel } from "../model.js";
+import { readPanel } from "../mods/onedev-issues/model.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const script = join(root, "scripts/install-layout.mjs");
@@ -296,9 +296,15 @@ test("an existing onedev-issues-button is left as it is", () => {
   assert.deepEqual(find(JSON.parse(readFileSync(p, "utf8")), "tab-bar").children, [custom]);
 });
 
-test("layouts/main-onedev-issues.json equals the generator output on Herdr's main.json", () => {
+test("build-layout.mjs writes the generator output for Herdr's main.json, and the layout step finds nothing left to add", () => {
+  const out = join(dir, "main-onedev-issues.json");
+  const r = spawnSync("node", [join(root, "scripts/build-layout.mjs"), HERDR_MAIN, out], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
   const built = buildLayout(JSON.parse(readFileSync(HERDR_MAIN, "utf8")));
-  assert.equal(readFileSync(join(root, "layouts/main-onedev-issues.json"), "utf8"), JSON.stringify(built, null, 2) + "\n");
+  assert.equal(readFileSync(out, "utf8"), JSON.stringify(built, null, 2) + "\n");
+  const again = run(out);
+  assert.equal(again.status, 0, again.stderr);
+  assert.equal(again.stdout.trim(), "unchanged");
 });
 
 const count = (node, id) => (node?.id === id ? 1 : 0) + (Array.isArray(node?.children) ? node.children.reduce((n, c) => n + count(c, id), 0) : 0);

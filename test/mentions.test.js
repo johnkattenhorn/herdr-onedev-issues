@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mentionScanner } from "../cache.js";
+import { mentionScanner } from "../mods/onedev-issues/cache.js";
 import { verdict } from "./helpers.js";
 
 const V = verdict();

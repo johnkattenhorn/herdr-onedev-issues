@@ -3,7 +3,7 @@ import { access, chmod, constants, readFile, realpath, rename, rm, stat, writeFi
 import { basename, dirname, join } from "node:path";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { holdsGithubSlot } from "../model.js";
+import { holdsGithubSlot } from "../mods/onedev-issues/model.js";
 
 const MOD = "onedev-issues";
 const BUTTON_ID = "onedev-issues-button";

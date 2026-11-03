@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { issueFromUrl, issueUrl, pullUrl, splitCode, toBlocks, webUrl } from "../markdown.js";
+import { issueFromUrl, issueUrl, pullUrl, splitCode, toBlocks, webUrl } from "../mods/onedev-issues/markdown.js";
 
 const fixture = (name) => readFileSync(new URL(`fixtures/${name}`, import.meta.url), "utf8");
 

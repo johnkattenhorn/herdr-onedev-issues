@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildLayout } from "../scripts/build-layout.mjs";
 import { installLayout } from "../scripts/install-layout.mjs";
-import * as model from "../model.js";
+import * as model from "../mods/onedev-issues/model.js";
 import { verdict } from "./helpers.js";
 
 const {
@@ -14,6 +15,7 @@ const {
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const json = (p) => JSON.parse(readFileSync(join(root, p), "utf8"));
+const builtMain = () => buildLayout(json("test/fixtures/herdr-main.json"));
 const find = (node, id) => node.id === id ? node : node.children?.map((c) => find(c, id)).find(Boolean);
 
 const V = verdict();
@@ -42,8 +44,8 @@ test("readPanel: a layout with no panel-body is hidden, unless the panel block s
   assert.deepEqual(readPanel(block), { mode: "onedev-issues", columnShown: true, active: null, childIds: [], shared: false });
 });
 
-test("readPanel: the committed layout starts hidden with the panel child present", () => {
-  const slot = readPanel(json("layouts/main-onedev-issues.json"));
+test("readPanel: the layout built from Herdr's main starts hidden with the panel child present", () => {
+  const slot = readPanel(builtMain());
   assert.deepEqual(slot, { mode: "hidden", columnShown: false, active: "files", childIds: ["files", "changes", "onedev-issues"], shared: false });
 });
 
@@ -73,7 +75,7 @@ test("readPanel: shared only when the upstream panel is there and our button car
 });
 
 test("readPanel: shown column and active child give onedev-issues, issues or hidden", () => {
-  const layout = json("layouts/main-onedev-issues.json");
+  const layout = builtMain();
   const body = find(layout, "panel-body");
   find(layout, "panel").hidden = false;
   for (const [active, mode] of [["onedev-issues", "onedev-issues"], ["issues", "issues"], ["files", "hidden"], ["changes", "hidden"]]) {

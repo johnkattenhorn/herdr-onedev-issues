@@ -1,5 +1,7 @@
 # Herdr OneDev Issues
 
+![Herdr OneDev Issues: OneDev issues beside your terminals and coding agents](social.png)
+
 A [Herdr](https://herdr.dev) mod that lists the OneDev issues of the repository the focused terminal is in. You can read an issue, comment on it, move it to another state, edit its fields and assign yourself without leaving Herdr.
 
 ![Herdr OneDev Issues](preview.png)
@@ -23,13 +25,15 @@ Not in this mod: avatars (it draws initials), reactions, milestones. The design 
 
 ## Install
 
-Herdr keeps mods and layouts in `~/.config/herdr-app` (set `HERDR_APP_HOME` to use another folder).
+Run the steps from the root of a clone of this repository. Herdr keeps mods and layouts in `~/.config/herdr-app` (set `HERDR_APP_HOME` to use another folder).
+
+The mod is the folder `mods/onedev-issues/`. An agent that follows herdr.dev/mods copies that folder to `mods/` and runs step 2.
 
 1. Copy the mod's runtime files into the mods folder. Copy them: Herdr does not draw icons from a symlinked mod folder.
 
    ```sh
-   mkdir -p ~/.config/herdr-app/mods/onedev-issues
-   cp *.js mod.json ~/.config/herdr-app/mods/onedev-issues/
+   mkdir -p ~/.config/herdr-app/mods
+   cp -r mods/onedev-issues ~/.config/herdr-app/mods/
    herdr-app check ~/.config/herdr-app/mods/onedev-issues
    ```
 
@@ -41,10 +45,10 @@ Herdr keeps mods and layouts in `~/.config/herdr-app` (set `HERDR_APP_HOME` to u
      node scripts/install-layout.mjs ~/.config/herdr-app/layouts/my-main.json
      ```
 
-   - **Herdr's `main`**: copy the ready-made clone and switch to it. It is `main` 0.1.12 with the button and panel added.
+   - **Herdr's `main`**: build a clone of `main` that has the button and the panel, and switch to it. The first command reads Herdr's own `main.json` and writes `main-onedev-issues.json` next to it. Your `main` stays as it was.
 
      ```sh
-     cp layouts/main-onedev-issues.json ~/.config/herdr-app/layouts/
+     node scripts/build-layout.mjs ~/.config/herdr-app/layouts/main.json ~/.config/herdr-app/layouts/main-onedev-issues.json
      herdr-app do layout.switch '{"name":"main-onedev-issues"}'
      ```
 
@@ -92,7 +96,7 @@ The value must be a bare command name or an absolute path. Any other value is re
 
 ```sh
 node --test            # unit tests, no network and no OneDev
-node --check main.js   # syntax check of a file
+node --check mods/onedev-issues/main.js   # syntax check of a file
 ```
 
 `scripts/seed-sandbox.sh` fills a throwaway OneDev project with 420 issues for live tests. It writes nothing without `--apply`, and only to a project whose path ends in `-sandbox`. Pass the target with `SEED_PROJECT`, `SEED_HOST` and `SEED_ASSIGNEE`.

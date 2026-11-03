@@ -4,7 +4,7 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:f
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import * as odevModule from "../odev.js";
+import * as odevModule from "../mods/onedev-issues/odev.js";
 import { fakeExec, nodeExec, reply, verdict, wireRow, writeExecutable } from "./helpers.js";
 
 const { createOdev, loadConfig, parseIssueRow, parseOdevConfig, utf8Length } = odevModule;

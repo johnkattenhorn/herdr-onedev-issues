@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
-import { actorName, ago, copyTexts, groupTimeline, initials, stateColorKey } from "../issue-model.js";
-import { createOdev, parseIssueView, parseTimeline } from "../odev.js";
+import { actorName, ago, copyTexts, groupTimeline, initials, stateColorKey } from "../mods/onedev-issues/issue-model.js";
+import { createOdev, parseIssueView, parseTimeline } from "../mods/onedev-issues/odev.js";
 import { fakeExec, reply, verdict } from "./helpers.js";
 
 const john = { id: 4, login: "john", fullName: "John" };

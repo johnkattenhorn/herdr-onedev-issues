@@ -5,8 +5,8 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { SORTS, cacheFileName, chooseView, createCaches, displayText, herdrIO, stateTabs } from "../cache.js";
-import { parseIssueRow } from "../odev.js";
+import { SORTS, cacheFileName, chooseView, createCaches, displayText, herdrIO, stateTabs } from "../mods/onedev-issues/cache.js";
+import { parseIssueRow } from "../mods/onedev-issues/odev.js";
 import { nodeExec, verdict, wireRow } from "./helpers.js";
 
 const V = verdict();

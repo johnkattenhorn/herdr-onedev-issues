@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createOdev } from "../odev.js";
-import { CHANGED, assigneesAfter, changeRecord, createDrafts, createWriter, parseChange, postsOnSubmit, shortcutBody } from "../writes.js";
+import { createOdev } from "../mods/onedev-issues/odev.js";
+import { CHANGED, assigneesAfter, changeRecord, createDrafts, createWriter, parseChange, postsOnSubmit, shortcutBody } from "../mods/onedev-issues/writes.js";
 import { fakeExec, reply, verdict } from "./helpers.js";
 
 const TARGET = ["--host", "http://192.0.2.30:6610", "--project", "team/app"];
