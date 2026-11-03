@@ -1,0 +1,163 @@
+[
+  {
+    "kind": "comment",
+    "id": 3636,
+    "date": "2026-11-03T13:35:02.27Z",
+    "actor": {
+      "id": -1,
+      "login": "OneDev",
+      "fullName": "OneDev"
+    },
+    "body": "State changed as pull request #104 is open"
+  },
+  {
+    "kind": "change",
+    "id": 10301,
+    "date": "2026-11-03T13:35:03.27Z",
+    "actor": {
+      "id": -1,
+      "login": "OneDev",
+      "fullName": "OneDev"
+    },
+    "type": "IssueStateChangeData",
+    "data": {
+      "@type": "IssueStateChangeData",
+      "oldFields": {
+        "Type": {
+          "name": "Type",
+          "type": "Enumeration",
+          "values": [
+            "Bug"
+          ]
+        },
+        "Priority": {
+          "name": "Priority",
+          "type": "Enumeration",
+          "values": [
+            "Normal"
+          ]
+        },
+        "Triage": {
+          "name": "Triage",
+          "type": "Enumeration",
+          "values": [
+            "ready-for-agent"
+          ]
+        }
+      },
+      "newFields": {
+        "Type": {
+          "name": "Type",
+          "type": "Enumeration",
+          "values": [
+            "Bug"
+          ]
+        },
+        "Priority": {
+          "name": "Priority",
+          "type": "Enumeration",
+          "values": [
+            "Normal"
+          ]
+        },
+        "Triage": {
+          "name": "Triage",
+          "type": "Enumeration",
+          "values": [
+            "ready-for-agent"
+          ]
+        }
+      },
+      "oldState": "Open",
+      "newState": "In Review"
+    }
+  },
+  {
+    "kind": "change",
+    "id": 10302,
+    "date": "2026-11-03T13:35:03.312Z",
+    "actor": {
+      "id": 4,
+      "login": "demo-user",
+      "fullName": "Jane Doe"
+    },
+    "type": "IssueReferencedFromPullRequestData",
+    "data": {
+      "@type": "IssueReferencedFromPullRequestData",
+      "requestId": 2140
+    }
+  },
+  {
+    "kind": "comment",
+    "id": 3637,
+    "date": "2026-11-03T14:01:32.626Z",
+    "actor": {
+      "id": -1,
+      "login": "OneDev",
+      "fullName": "OneDev"
+    },
+    "body": "State changed as code fixing the issue is committed (b15a8e739c8370d05fe7cf8875e12ceceaace234)"
+  },
+  {
+    "kind": "change",
+    "id": 10304,
+    "date": "2026-11-03T14:01:33.626Z",
+    "actor": {
+      "id": -1,
+      "login": "OneDev",
+      "fullName": "OneDev"
+    },
+    "type": "IssueStateChangeData",
+    "data": {
+      "@type": "IssueStateChangeData",
+      "oldFields": {
+        "Type": {
+          "name": "Type",
+          "type": "Enumeration",
+          "values": [
+            "Bug"
+          ]
+        },
+        "Priority": {
+          "name": "Priority",
+          "type": "Enumeration",
+          "values": [
+            "Normal"
+          ]
+        },
+        "Triage": {
+          "name": "Triage",
+          "type": "Enumeration",
+          "values": [
+            "ready-for-agent"
+          ]
+        }
+      },
+      "newFields": {
+        "Type": {
+          "name": "Type",
+          "type": "Enumeration",
+          "values": [
+            "Bug"
+          ]
+        },
+        "Priority": {
+          "name": "Priority",
+          "type": "Enumeration",
+          "values": [
+            "Normal"
+          ]
+        },
+        "Triage": {
+          "name": "Triage",
+          "type": "Enumeration",
+          "values": [
+            "ready-for-agent"
+          ]
+        }
+      },
+      "oldState": "In Review",
+      "newState": "Closed"
+    }
+  }
+]

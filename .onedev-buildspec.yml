@@ -1,0 +1,30 @@
+version: 39
+jobs:
+  - name: test
+    steps:
+      - !CheckoutStep
+        name: checkout
+        cloneCredential: !DefaultCredential {}
+        withLfs: false
+        withSubmodules: false
+        condition: ALL_PREVIOUS_STEPS_WERE_SUCCESSFUL
+      - !CommandStep
+        # The tests need no network and no OneDev: they run the mod's logic
+        # against stubs and fixtures.
+        name: unit tests
+        runInContainer: true
+        image: node:22-bookworm
+        interpreter: !DefaultInterpreter
+          commands: |
+            set -e
+            node --version
+            node --test
+        useTTY: false
+        condition: ALL_PREVIOUS_STEPS_WERE_SUCCESSFUL
+    triggers:
+      - !BranchUpdateTrigger {}
+      - !PullRequestUpdateTrigger {}
+    retryCondition: never
+    maxRetries: 3
+    retryDelay: 30
+    timeout: 600
