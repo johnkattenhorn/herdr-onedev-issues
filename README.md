@@ -66,6 +66,8 @@ node scripts/install-layout.mjs --replace-github-button ~/.config/herdr-app/layo
 
 This mod's button then takes the GitHub button's place in the tab bar, and the GitHub panel stays in the layout. A folder that is a OneDev project opens the OneDev panel. Any other folder opens the GitHub panel, and so does a folder where the `odev` lookup fails (`odev` missing or broken). The OneDev panel still shows the error when you open it. The step refuses to run on a layout that has no GitHub `issues` panel. Run it on a layout that already has the separate button and it converts that layout: one OneDev button is left, in the GitHub slot.
 
+The step keeps your GitHub button block on this mod's button, at `content.props.replaced`. That marker is what makes the button switch panels. Do not remove it by hand. A layout where this mod's button took the slot before the marker existed does not switch until you run the step on it once more. The step adds the marker with the block from commit `dd1d0f4`, and says so.
+
 ## Uninstall
 
 Remove the button and the panel from a layout:
@@ -74,7 +76,7 @@ Remove the button and the panel from a layout:
 node scripts/install-layout.mjs --remove ~/.config/herdr-app/layouts/my-main.json
 ```
 
-If this mod's button had taken the GitHub button's place, `--remove` puts the GitHub mod's `issues-button` back in that place, as it is at commit `dd1d0f4`. A second run prints `unchanged`. Then delete the mod folder `~/.config/herdr-app/mods/onedev-issues`. If you installed `main-onedev-issues` as a layout, switch to another layout first.
+If this mod's button had taken the GitHub button's place, `--remove` puts your own `issues-button` block back in that place, exactly as it was, with its size and any other keys. Without the marker, `--remove` deletes this mod's button and adds nothing. A second run prints `unchanged`. Then delete the mod folder `~/.config/herdr-app/mods/onedev-issues`. If you installed `main-onedev-issues` as a layout, switch to another layout first.
 
 ## Configuration
 

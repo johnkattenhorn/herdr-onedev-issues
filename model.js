@@ -113,6 +113,18 @@ function hasPanelBlock(node) {
 }
 
 /**
+ * Whether our button holds the GitHub button's slot: it keeps the block it took over at
+ * `content.props.replaced`. `--remove` and `readPanel` both use this rule, and a malformed marker is no marker.
+ * @param {unknown} button
+ * @returns {boolean}
+ */
+export function holdsGithubSlot(button) {
+  if (!isObject(button) || !isObject(button.content) || !isObject(button.content.props)) return false;
+  const replaced = button.content.props.replaced;
+  return isObject(replaced) && replaced.id === "issues-button";
+}
+
+/**
  * @param {unknown} layoutRoot
  * @returns {PanelSlot}
  */
@@ -131,10 +143,7 @@ export function readPanel(layoutRoot) {
   const childIds = kids.map((c) => (isObject(c) ? c.id : null)).filter((id) => typeof id === "string");
   const active = typeof body.active === "string" ? body.active : (childIds[0] ?? null);
   const mode = !columnShown ? "hidden" : active === "onedev-issues" || active === "issues" ? active : "hidden";
-  const bar = findNode(layoutRoot, "tab-bar");
-  const barIds = Array.isArray(bar?.children) ? bar.children.map((c) => (isObject(c) ? c.id : null)) : [];
-  // Shared mode: the upstream GitHub panel is in the layout and this mod's button took its button's slot.
-  const shared = childIds.includes("issues") && !barIds.includes("issues-button");
+  const shared = childIds.includes("issues") && holdsGithubSlot(findNode(findNode(layoutRoot, "tab-bar"), "onedev-issues-button"));
   return { mode, columnShown, active, childIds, shared };
 }
 

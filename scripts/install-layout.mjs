@@ -3,15 +3,18 @@ import { access, chmod, constants, readFile, realpath, rename, rm, stat, writeFi
 import { basename, dirname, join } from "node:path";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { holdsGithubSlot } from "../model.js";
 
 const MOD = "onedev-issues";
 const BUTTON_ID = "onedev-issues-button";
 const GITHUB_BUTTON_ID = "issues-button";
 const GITHUB_PANEL_ID = "issues";
 const buttonContent = () => ({ mod: MOD, props: { button: true } });
+const markedContent = (replaced) => ({ mod: MOD, props: { button: true, replaced } });
 
 // The upstream GitHub mod's tab-bar block, as layouts/main-issues.json has it at
 // https://github.com/jankeesvw/herdr-issues/commit/dd1d0f4aaed35ce2b75bf30dd925941d46ff3d0a
+// Only for a layout whose button took the slot before the marker existed: its own block is gone.
 const upstreamButton = () => ({
   id: GITHUB_BUTTON_ID,
   type: "block",
@@ -27,6 +30,17 @@ function findNode(node, id) {
   if (node.id === id) return node;
   for (const child of Array.isArray(node.children) ? node.children : []) {
     const hit = findNode(child, id);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+/** @returns {{ siblings: unknown[], index: number } | undefined} */
+function locate(parent, id) {
+  const siblings = Array.isArray(parent?.children) ? parent.children : [];
+  for (const [index, child] of siblings.entries()) {
+    if (child?.id === id) return { siblings, index };
+    const hit = locate(child, id);
     if (hit) return hit;
   }
   return undefined;
@@ -54,18 +68,19 @@ export function installLayout(input, { mode = "separate" } = {}) {
   const bar = (tabBar.children ??= []);
   const panels = (panelBody.children ??= []);
   const indexIn = (list, id) => list.findIndex((c) => c?.id === id);
-  const hasGithubPanel = indexIn(panels, GITHUB_PANEL_ID) >= 0;
   const changes = [];
 
+  const own = locate(tabBar, BUTTON_ID);
+  const slot = locate(tabBar, GITHUB_BUTTON_ID);
+
   if (mode === "remove") {
-    const own = indexIn(bar, BUTTON_ID);
-    if (own >= 0) {
-      // The OneDev button holds the GitHub slot when the upstream panel is there and its button is not.
-      if (hasGithubPanel && indexIn(bar, GITHUB_BUTTON_ID) < 0) {
-        bar[own] = upstreamButton();
+    if (own) {
+      const button = own.siblings[own.index];
+      if (holdsGithubSlot(button) && !slot) {
+        own.siblings[own.index] = button.content.props.replaced;
         changes.push(`tab-bar: replaced ${BUTTON_ID} with ${GITHUB_BUTTON_ID}`);
       } else {
-        bar.splice(own, 1);
+        own.siblings.splice(own.index, 1);
         changes.push(`tab-bar: removed ${BUTTON_ID}`);
       }
     }
@@ -82,24 +97,25 @@ export function installLayout(input, { mode = "separate" } = {}) {
   }
 
   if (mode === "replace") {
-    if (!hasGithubPanel) {
+    if (indexIn(panels, GITHUB_PANEL_ID) < 0) {
       return { ok: false, error: `--replace-github-button needs the GitHub Issues mod's panel: no ${GITHUB_PANEL_ID} child in panel-body` };
     }
-    const slot = indexIn(bar, GITHUB_BUTTON_ID);
-    const own = indexIn(bar, BUTTON_ID);
-    if (slot < 0 && own < 0) {
+    if (!slot && !own) {
       return { ok: false, error: `--replace-github-button needs the GitHub Issues mod's button: no ${GITHUB_BUTTON_ID} in tab-bar` };
     }
-    if (slot >= 0) {
-      const taken = { ...bar[slot], id: BUTTON_ID, content: buttonContent() };
-      if (own >= 0) {
-        bar.splice(own, 1);
+    if (slot) {
+      const block = slot.siblings[slot.index];
+      slot.siblings[slot.index] = { ...block, id: BUTTON_ID, content: markedContent(structuredClone(block)) };
+      if (own) {
+        own.siblings.splice(own.index, 1);
         changes.push(`tab-bar: removed the separate ${BUTTON_ID}`);
       }
-      bar[bar.findIndex((c) => c?.id === GITHUB_BUTTON_ID)] = taken;
       changes.push(`tab-bar: replaced ${GITHUB_BUTTON_ID} with ${BUTTON_ID}`);
+    } else if (!holdsGithubSlot(own.siblings[own.index])) {
+      own.siblings[own.index].content = markedContent(upstreamButton());
+      changes.push(`tab-bar: marked ${BUTTON_ID} as holding the ${GITHUB_BUTTON_ID} slot, with the block from dd1d0f4`);
     }
-  } else if (indexIn(bar, BUTTON_ID) < 0) {
+  } else if (!own) {
     bar.push({ id: BUTTON_ID, type: "block", size: { px: 78 }, window_drag: true, content: buttonContent() });
     changes.push(`tab-bar: added ${BUTTON_ID}`);
   }

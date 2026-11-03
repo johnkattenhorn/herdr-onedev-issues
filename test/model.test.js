@@ -56,7 +56,7 @@ test("readPanel: my-main.json after the default install has both issues children
   assert.equal(slot.shared, false);
 });
 
-test("readPanel: shared only when the upstream panel is there and its button is gone", () => {
+test("readPanel: shared only when the upstream panel is there and our button carries the marker", () => {
   const src = json("test/fixtures/my-main.json");
   const replaced = installLayout(src, { mode: "replace" });
   assert.equal(readPanel(replaced.layout).shared, true);
@@ -69,7 +69,7 @@ test("readPanel: shared only when the upstream panel is there and its button is 
   const own = installLayout(src);
   assert.equal(readPanel(own.layout).shared, false);
   find(own.layout, "tab-bar").children = [];
-  assert.equal(readPanel(own.layout).shared, true);
+  assert.equal(readPanel(own.layout).shared, false);
 });
 
 test("readPanel: shown column and active child give onedev-issues, issues or hidden", () => {

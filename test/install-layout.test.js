@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildLayout } from "../scripts/build-layout.mjs";
 import { installLayout, parseArgs } from "../scripts/install-layout.mjs";
+import { readPanel } from "../model.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const script = join(root, "scripts/install-layout.mjs");
@@ -78,7 +79,7 @@ test("--replace-github-button: takes the issues-button slot and keeps the upstre
   const i = ids(before).indexOf("issues-button");
   assert.equal(ids(bar)[i], "onedev-issues-button");
   assert.equal(bar.children.length, before.children.length);
-  assert.deepEqual(bar.children[i].content, { mod: "onedev-issues", props: { button: true } });
+  assert.deepEqual(bar.children[i].content, { mod: "onedev-issues", props: { button: true, replaced: UPSTREAM_BUTTON } });
   assert.equal(bar.children[i].window_drag, true);
   assert.deepEqual(bar.children[i].size, { px: 78 });
   const body = find(out, "panel-body");
@@ -298,4 +299,168 @@ test("an existing onedev-issues-button is left as it is", () => {
 test("layouts/main-onedev-issues.json equals the generator output on Herdr's main.json", () => {
   const built = buildLayout(JSON.parse(readFileSync(HERDR_MAIN, "utf8")));
   assert.equal(readFileSync(join(root, "layouts/main-onedev-issues.json"), "utf8"), JSON.stringify(built, null, 2) + "\n");
+});
+
+const count = (node, id) => (node?.id === id ? 1 : 0) + (Array.isArray(node?.children) ? node.children.reduce((n, c) => n + count(c, id), 0) : 0);
+const handmade = (barChildren) => ({
+  id: "root", type: "column",
+  children: [
+    { id: "tab-bar", type: "row", children: barChildren },
+    { id: "panel-body", type: "stack", active: "files", children: [{ id: "files", type: "block" }, { id: "issues", type: "block", content: { mod: "issues" } }] },
+  ],
+});
+const inSubRow = (block = UPSTREAM_BUTTON) => handmade([{ id: "tabs", type: "block" }, { id: "sub", type: "row", children: [{ id: "extra", type: "block" }, block] }]);
+const panelNoButton = () => handmade([{ id: "tabs", type: "block" }]);
+const CHANGED = { id: "issues-button", type: "block", size: { px: 96 }, window_drag: true, note: "mine", content: { mod: "issues", props: { button: true } } };
+const ownButton = (content) => ({ id: "onedev-issues-button", type: "block", size: { px: 78 }, window_drag: true, content });
+const unmarked = () => handmade([{ id: "tabs", type: "block" }, ownButton({ mod: "onedev-issues", props: { button: true } })]);
+
+test("GitHub button in a sub-row: default then --remove leaves one issues-button and is not shared", () => {
+  const installed = must(inSubRow()).layout;
+  assert.deepEqual(ids(find(installed, "tab-bar")), ["tabs", "sub", "onedev-issues-button"]);
+  assert.equal(readPanel(installed).shared, false);
+  const removed = must(installed, "remove").layout;
+  assert.equal(count(removed, "issues-button"), 1);
+  assert.deepEqual(removed, inSubRow());
+  assert.equal(readPanel(removed).shared, false);
+});
+
+test("GitHub panel with no GitHub button: default then --remove adds no issues-button and is not shared", () => {
+  const installed = must(panelNoButton()).layout;
+  assert.equal(readPanel(installed).shared, false);
+  const removed = must(installed, "remove").layout;
+  assert.equal(count(removed, "issues-button"), 0);
+  assert.deepEqual(removed, panelNoButton());
+  assert.equal(readPanel(removed).shared, false);
+});
+
+test("a changed GitHub block comes back exactly after replace then remove", () => {
+  const original = handmade([{ id: "tabs", type: "block" }, CHANGED]);
+  const replaced = must(original, "replace").layout;
+  const button = find(replaced, "onedev-issues-button");
+  assert.deepEqual(button.size, { px: 96 });
+  assert.equal(button.note, "mine");
+  assert.deepEqual(button.content, { mod: "onedev-issues", props: { button: true, replaced: CHANGED } });
+  assert.notEqual(button.content.props.replaced.size, button.size);
+  assert.equal(readPanel(replaced).shared, true);
+  const removed = must(replaced, "remove");
+  assert.deepEqual(removed.layout, original);
+  assert.deepEqual(removed.changes, ["tab-bar: replaced onedev-issues-button with issues-button", "panel-body: removed onedev-issues"]);
+});
+
+test("replace acts in place in a sub-row, and remove puts the block back there", () => {
+  const replaced = must(inSubRow(CHANGED), "replace").layout;
+  assert.deepEqual(ids(find(replaced, "sub")), ["extra", "onedev-issues-button"]);
+  assert.deepEqual(ids(find(replaced, "tab-bar")), ["tabs", "sub"]);
+  assert.equal(readPanel(replaced).shared, true);
+  assert.deepEqual(must(replaced, "remove").layout, inSubRow(CHANGED));
+});
+
+test("our button in a sub-row is removed there and nothing else goes", () => {
+  const l = inSubRow();
+  find(l, "sub").children.unshift(ownButton({ mod: "onedev-issues", props: { button: true } }));
+  assert.deepEqual(must(l, "remove").layout, inSubRow());
+});
+
+test("convert with the separate button in a sub-row leaves one OneDev button, in the GitHub slot", () => {
+  const l = handmade([{ id: "row-a", type: "row", children: [ownButton({ mod: "onedev-issues", props: { button: true } })] }, CHANGED]);
+  const r = must(l, "replace").layout;
+  assert.deepEqual(ids(find(r, "row-a")), []);
+  assert.deepEqual(ids(find(r, "tab-bar")), ["row-a", "onedev-issues-button"]);
+  assert.deepEqual(find(r, "onedev-issues-button").content.props.replaced, CHANGED);
+});
+
+test("--remove does not add a second issues-button when the user put one back by hand", () => {
+  const l = must(mine(), "replace").layout;
+  find(l, "tab-bar").children.push(CHANGED);
+  const removed = must(l, "remove").layout;
+  assert.equal(count(removed, "issues-button"), 1);
+  assert.equal(count(removed, "onedev-issues-button"), 0);
+  assert.deepEqual(find(removed, "issues-button"), CHANGED);
+});
+
+const roundTrips = {
+  "default on my-main": [mine, ["separate"]],
+  "replace on my-main": [mine, ["replace"]],
+  "convert on my-main": [mine, ["separate", "replace"]],
+  "default, sub-row": [inSubRow, ["separate"]],
+  "replace, sub-row": [inSubRow, ["replace"]],
+  "convert, sub-row": [inSubRow, ["separate", "replace"]],
+  "default, panel and no button": [panelNoButton, ["separate"]],
+};
+for (const [name, [source, modes]] of Object.entries(roundTrips)) {
+  test(`round trip, ${name}: each rerun changes nothing and --remove gives back the source`, () => {
+    let layout = source();
+    for (const mode of modes) {
+      layout = must(layout, mode).layout;
+      assert.deepEqual(must(layout, mode).changes, [], mode);
+    }
+    const removed = must(layout, "remove");
+    assert.deepEqual(removed.layout, source());
+    assert.deepEqual(must(removed.layout, "remove").changes, []);
+  });
+}
+
+test("a layout with no marker converts: the marker holds the dd1d0f4 block, and the step says so", () => {
+  const before = unmarked();
+  assert.equal(readPanel(before).shared, false);
+  const r = must(before, "replace");
+  assert.deepEqual(find(r.layout, "onedev-issues-button"), ownButton({ mod: "onedev-issues", props: { button: true, replaced: UPSTREAM_BUTTON } }));
+  assert.deepEqual(r.changes, ["tab-bar: marked onedev-issues-button as holding the issues-button slot, with the block from dd1d0f4", "panel-body: added onedev-issues"]);
+  assert.equal(readPanel(r.layout).shared, true);
+  assert.deepEqual(must(r.layout, "replace").changes, []);
+  assert.deepEqual(find(must(r.layout, "remove").layout, "issues-button"), UPSTREAM_BUTTON);
+});
+
+test("the conversion on a file prints what it did, then unchanged", () => {
+  const p = write("unmarked.json", JSON.stringify(unmarked()));
+  const first = run(p, "--replace-github-button");
+  assert.equal(first.status, 0, first.stderr);
+  assert.match(first.stdout, /marked onedev-issues-button/);
+  assert.equal(run(p, "--replace-github-button").stdout.trim(), "unchanged");
+});
+
+const badMarkers = { null: null, string: "issues-button", number: 7, array: [{ id: "issues-button" }], "empty object": {}, "wrong id": { id: "other-button" } };
+const badButtons = {
+  "content is a string": "x",
+  "content is a number": 3,
+  "content is null": null,
+  "content is an array": [],
+  "props is a string": { mod: "onedev-issues", props: "x" },
+  "props is a number": { mod: "onedev-issues", props: 3 },
+  "props is null": { mod: "onedev-issues", props: null },
+  "props is an array": { mod: "onedev-issues", props: [{ replaced: UPSTREAM_BUTTON }] },
+};
+const malformed = {
+  ...Object.fromEntries(Object.entries(badMarkers).map(([k, replaced]) => [`replaced is ${k}`, { mod: "onedev-issues", props: { button: true, replaced } }])),
+  ...badButtons,
+};
+for (const [name, content] of Object.entries(malformed)) {
+  const layout = () => handmade([{ id: "tabs", type: "block" }, ownButton(content)]);
+  test(`malformed marker, --remove: ${name}: deletes our button and adds no issues-button`, () => {
+    const removed = must(layout(), "remove").layout;
+    assert.deepEqual(removed, panelNoButton());
+  });
+  test(`malformed marker, --replace-github-button: ${name}: counts as no marker`, () => {
+    const replaced = must(layout(), "replace").layout;
+    assert.deepEqual(find(replaced, "onedev-issues-button").content, { mod: "onedev-issues", props: { button: true, replaced: UPSTREAM_BUTTON } });
+    assert.equal(readPanel(replaced).shared, true);
+  });
+  test(`malformed marker, readPanel: ${name}: not shared`, () => {
+    assert.equal(readPanel(layout()).shared, false);
+  });
+}
+
+test("wrong-typed entries in a sub-row do not hide the button or crash any mode", () => {
+  const l = () => handmade([{ id: "sub", type: "row", children: [null, 3, "x", [], { id: "deep", children: "x" }, { id: "deeper", children: [null] }, CHANGED] }]);
+  assert.equal(readPanel(l()).shared, false);
+  assert.deepEqual(must(must(l()).layout, "remove").layout, l());
+  const replaced = must(l(), "replace").layout;
+  assert.equal(readPanel(replaced).shared, true);
+  assert.deepEqual(must(replaced, "remove").layout, l());
+});
+
+test("a null tab-bar child and a marked button past it: readPanel still finds the marker", () => {
+  const l = must(handmade([null, { id: "sub", type: "row", children: [null, CHANGED] }]), "replace").layout;
+  assert.equal(readPanel(l).shared, true);
 });
