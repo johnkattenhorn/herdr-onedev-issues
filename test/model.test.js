@@ -11,6 +11,7 @@ import { verdict } from "./helpers.js";
 const {
   beginCheck, bodyKind, slotShowsIssues, contextKey, endCheck, focusContext, mentionRows, parseChecks, parseCommand, parseContext, parsePrefs,
   parseSpaces, readPanel, rememberProject, routeStep, selectRow, serializeChecks, visibleRows, withPanels, effectiveState,
+  clickedPrefs, decodeItemKey, itemSizes, listItems, memoVisibleRows, panelBody,
 } = model;
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -403,4 +404,86 @@ test("slotShowsIssues: shared, either issues panel counts; separate, only the On
   const mk = (mode, shared) => ({ mode, columnShown: mode !== "hidden", active: mode, childIds: [], shared });
   assert.deepEqual(["hidden", "onedev-issues", "issues"].map((m) => slotShowsIssues(mk(m, true))), [false, true, true]);
   assert.deepEqual(["hidden", "onedev-issues", "issues"].map((m) => slotShowsIssues(mk(m, false))), [false, true, false]);
+});
+
+test("listItems: mentions with both headings, then rows, each with its key", () => {
+  const rows = [{ number: 4, title: "d", state: "Open" }, { number: 2, title: "b", state: "Open" }];
+  const mentions = [{ number: 9, title: "m", state: "Closed" }];
+  assert.deepEqual(listItems({ mentions, stateLabel: "Open", rows }).map((i) => [i.key, i.kind]), [
+    ["heading-mentions", "heading"], ["mention-9", "mention"], ["heading-state", "heading"],
+    ["row-4", "row"], ["row-2", "row"],
+  ]);
+  assert.deepEqual(listItems({ mentions: [], stateLabel: "Open", rows }).map((i) => i.key), ["row-4", "row-2"]);
+  assert.deepEqual(listItems({ mentions: [], stateLabel: "Open", rows: [] }), []);
+  const keys = listItems({ mentions: [{ ...mentions[0], number: 4 }], stateLabel: "Open", rows }).map((i) => i.key);
+  assert.equal(new Set(keys).size, keys.length);
+});
+
+test("itemSizes: one height per item, with the gap below each and the padding at both ends", () => {
+  const row = { number: 1, title: "t", state: "Open" };
+  const rows = (/** @type {number} */ n) => Array.from({ length: n }, (_, i) => ({ ...row, number: i + 1 }));
+  assert.deepEqual(itemSizes([]), []);
+  assert.deepEqual(itemSizes(listItems({ mentions: [], stateLabel: "Open", rows: rows(1) })), [64]);
+  assert.deepEqual(itemSizes(listItems({ mentions: [], stateLabel: "Open", rows: rows(3) })), [59, 53, 58]);
+  assert.deepEqual(itemSizes(listItems({ mentions: [{ ...row, number: 9 }], stateLabel: "Open", rows: rows(2) })), [37, 53, 31, 53, 58]);
+});
+
+test("panelBody: a null cache gives no items and no throw", () => {
+  const none = { userSyncing: false, error: null, note: null };
+  const p = prefs({ state: "Closed" });
+  const project = { host: "h", project: "p" };
+  const parts = { prefs: p, status: none, configError: null, contextError: null, rows: [], mentions: [] };
+  assert.deepEqual(panelBody({ ...parts, project: null, cache: null }), { kind: "no-project", error: null, items: [] });
+  assert.deepEqual(panelBody({ ...parts, project, cache: null }), { kind: "loading", error: null, items: [] });
+  assert.deepEqual(panelBody({ ...parts, project, cache: null, configError: "bad config" }), { kind: "no-match", error: "bad config", items: [] });
+  assert.deepEqual(panelBody({ ...parts, project: null, cache: null, configError: "bad config" }), { kind: "no-project", error: "bad config", items: [] });
+  assert.equal(panelBody({ ...parts, project: null, cache: null, contextError: "lookup failed" }).error, "lookup failed");
+});
+
+test("panelBody: the state heading names the tab in view, and a cache with no tabs says Issues", () => {
+  const none = { userSyncing: false, error: null, note: null };
+  const project = { host: "h", project: "p" };
+  const mention = { number: 3, title: "m", state: "Closed" };
+  const parts = { project, prefs: prefs({ state: "Closed" }), status: none, configError: null, contextError: null, rows: [], mentions: [mention] };
+  const label = (/** @type {any} */ cache) => panelBody({ ...parts, cache }).items.find((i) => i.key === "heading-state")?.label;
+  assert.equal(label(cacheOf(R)), "Closed");
+  assert.equal(label(cacheOf([])), "Issues");
+});
+
+test("clickedPrefs: a list row selects and keeps Mine and the tab; a mention row goes through selectRow", () => {
+  const c = cacheOf(R);
+  const on = prefs({ mine: true, state: "Open" });
+  assert.deepEqual(clickedPrefs(on, c, { kind: "row", number: 3 }), { ...on, selected: 3 });
+  assert.deepEqual(clickedPrefs(on, c, { kind: "mention", number: 3 }), selectRow(on, c, 3));
+  assert.equal(clickedPrefs(on, c, { kind: "mention", number: 3 }).mine, false);
+});
+
+test("decodeItemKey: row and mention keys give the number; headings and malformed keys give null", () => {
+  assert.deepEqual(decodeItemKey("row-17"), { kind: "row", number: 17 });
+  assert.deepEqual(decodeItemKey("mention-10003"), { kind: "mention", number: 10003 });
+  for (const k of ["heading-mentions", "heading-state", "row-", "row-0", "row-01", "row--1", "row-1.5", "row-1x", "row-1e3",
+    " row-1", "row-1\n", "row-1234567890123456", "other-3", "", "row", null, undefined, 4, {}]) {
+    assert.equal(decodeItemKey(k), null, String(k));
+  }
+});
+
+test("memoVisibleRows: the same array when only selected or menu changed; a new one for sort, state, mine or cache", () => {
+  const c = cacheOf(R, { mine: [1] });
+  const memo = memoVisibleRows();
+  const a = memo(c, prefs());
+  assert.deepEqual(nums(a), [4, 2, 1]);
+  assert.equal(memo(c, prefs({ selected: 2 })), a);
+  assert.equal(memo(c, prefs({ menu: true })), a);
+  const b = memo(c, prefs({ sort: "oldest" }));
+  assert.notEqual(b, a);
+  assert.deepEqual(nums(b), nums(visibleRows(c, prefs({ sort: "oldest" }))));
+  const d = memo(c, prefs({ sort: "oldest", state: "Closed" }));
+  assert.deepEqual(nums(d), [3]);
+  const e = memo(c, prefs({ sort: "oldest", state: "Closed", mine: true }));
+  assert.notEqual(e, d);
+  assert.deepEqual(nums(e), []);
+  const c2 = cacheOf(R, { mine: [1] });
+  const f = memo(c2, prefs({ sort: "oldest", state: "Closed", mine: true }));
+  assert.notEqual(f, e);
+  assert.equal(memo(c2, prefs({ sort: "oldest", state: "Closed", mine: true, selected: 3 })), f);
 });

@@ -1,13 +1,13 @@
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
+import { v_flex, h_flex, Scrollbar, v_virtual_list } from "gpui-base";
 import { appHome, exec, focused, hc, layout, nextCommand, openOverlay, panes, props, readTextFile, run, setShared, shared, spaces, theme } from "herdr";
 import * as fs from "fs/promises";
 import { createOdev, loadConfig } from "./odev.js";
 import { SORTS, cacheFileName, createCaches, displayText, herdrIO, mentionScanner, stateTabs } from "./cache.js";
 import {
-  CONTEXT, RECHECK, beginCheck, bodyKind, effectiveState, endCheck, focusContext, isPanelShown, mentionRows, parseChecks,
-  parseCommand, parseContext, parsePrefs, parseSpaces, readPanel, rememberProject, routeStep, selectRow, serializeChecks,
-  slotShowsIssues, visibleRows, withPanels,
+  CONTEXT, HEADING_HEIGHT, LIST_PADDING, RECHECK, ROW_HEIGHT, beginCheck, clickedPrefs, decodeItemKey, effectiveState, endCheck, focusContext, isPanelShown, itemSizes,
+  memoVisibleRows, mentionRows, panelBody, parseChecks, parseCommand, parseContext, parsePrefs, parseSpaces, readPanel, rememberProject, routeStep, selectRow,
+  serializeChecks, slotShowsIssues, withPanels,
 } from "./model.js";
 import { ensureIcons, icon } from "./icons.js";
 import { CopyMenu, IssueDialog, openCopyMenu } from "./viewer.js";
@@ -27,6 +27,7 @@ import { CHANGED, parseChange } from "./writes.js";
 const SPINNER = "mods/workspace-chrome/spinner.svg";
 const SYNC_MS = 30_000;
 const SCAN_MS = 3_000;
+const ERROR_MAX_HEIGHT = 112;
 const dataDir = () => `${appHome()}/data/onedev-issues`;
 
 const colors = () => /** @type {Theme} */ (theme());
@@ -172,6 +173,7 @@ class Viewer {
     /** @type {{ key: string, numbers: number[] } | null} */
     this.mentions = null;
     this.scanning = false;
+    this.visible = memoVisibleRows();
     this.wasShown = false;
     this.seenChange = parseChange(shared(CHANGED));
     /** @type {string | null} */
@@ -336,27 +338,37 @@ class Viewer {
     const store = this.store();
     const cache = store ? store.cache() : null;
     const status = store ? store.status() : { userSyncing: false, error: null, note: null };
-    const rows = cache ? visibleRows(cache, this.prefs) : [];
-    const kind = configError ? (ctx.project ? "no-match" : "no-project") : bodyKind(ctx.project, cache, status, rows);
-    const error = ctx.error ?? status.error ?? configError;
-
+    const rows = cache ? this.visible(cache, this.prefs) : [];
     const onSync = (/** @type {Cx} */ cx) => { this.refresh(cx, store); cx.notify(); };
     const set = (/** @type {Prefs} */ prefs, /** @type {Cx} */ cx) => { this.setPrefs(prefs); cx.notify(); };
-    const pick = (/** @type {number} */ n) => (/** @type {unknown} */ _e, /** @type {Cx} */ cx) => { this.prefs = { ...this.prefs, selected: n }; this.openIssue(n); cx.notify(); };
     const mentionList = cache && this.mentions?.key === this.key ? mentionRows(cache, this.mentions.numbers) : [];
+    const { kind, error, items } = panelBody({ project: ctx.project, cache, prefs: this.prefs, status, configError, contextError: ctx.error, rows, mentions: mentionList });
+    const onItem = (/** @type {string} */ key, /** @type {Cx} */ cx) => {
+      const item = decodeItemKey(key);
+      if (!item || !cache) return;
+      set(clickedPrefs(this.prefs, cache, item), cx);
+      this.openIssue(item.number);
+    };
 
     return frame
       .child(header(t, ctx.project, status.userSyncing, this.icons, store ? onSync : null))
       .when(cache !== null && kind !== "no-project", (e) => e.child(controls(t, cache, this.prefs, set)))
-      .child(v_flex().id("onedev-issues-list").flex_1().min_h(0).overflow_y_scrollbar().p(6).gap(1)
-        .when(Boolean(error), (e) => e.child(div().px(10).py(4).text_size(11).text_color(t.ansi1).child(displayText(error, 300))))
-        .when(mentionList.length > 0, (e) => e.child(heading(t, "In this terminal"))
-          .children(mentionList.map((r) => issueRow(t, r, `mention-${r.number}`, this.prefs.selected === r.number,
-            (_e, cx) => { set(selectRow(this.prefs, cache, r.number), cx); this.openIssue(r.number); })))
-          .child(heading(t, effectiveState(cache, this.prefs) ?? "Issues")))
-        .when(kind === "list", (e) => e.children(rows.map((r) => issueRow(t, r, `row-${r.number}`, this.prefs.selected === r.number, pick(r.number),
-          () => ctx.project && openCopyMenu({ host: ctx.project.host, project: ctx.project.project, number: r.number, title: r.title })))))
-        .when(kind !== "list", (e) => e.child(emptyState(t, kind))));
+      .when(Boolean(error), (e) => e.child(errorLine(t, displayText(error, 300))))
+      .child(kind === "list"
+        ? v_flex().relative().flex_1().min_h(0)
+          .child(v_virtual_list("onedev-issues-list", items.length, itemSizes(items), (i) => items[i].key,
+            (range) => items.slice(range.start, range.end).map((it, k) => listItem(t, it, this.prefs.selected, range.start + k === 0, range.start + k === items.length - 1)))
+            .size_full()
+            .on_item_click(onItem)
+            .on_item_secondary_click((key) => {
+              const item = decodeItemKey(key);
+              const r = item?.kind === "row" ? rows.find((x) => x.number === item.number) : null;
+              if (r && ctx.project) openCopyMenu({ host: ctx.project.host, project: ctx.project.project, number: r.number, title: r.title });
+            }))
+          .child(Scrollbar.vertical("onedev-issues-list").absolute().inset_0())
+        : v_flex().id("onedev-issues-empty").flex_1().min_h(0).overflow_y_scrollbar().p(LIST_PADDING).gap(1)
+          .children(items.map((it) => itemBody(t, it, this.prefs.selected, (_e, cx) => onItem(it.key, cx))))
+          .child(emptyState(t, kind)));
   }
 }
 
@@ -406,16 +418,33 @@ function controls(t, cache, prefs, set) {
         (_e, cx) => set({ ...prefs, sort: s.id, menu: false }, cx))))));
 }
 
-/** @param {Theme} t @param {string} label */
-function heading(t, label) {
-  return div().flex_none().px(10).pt(8).pb(4).text_size(11).font_semibold().text_color(t.dim).child(displayText(label, 40));
+/**
+ * One item of the virtual list, in the height that `itemSizes` states for it. An item takes no handlers: the list reports the click by key.
+ * @param {Theme} t @param {import("./model.js").ListItem} it @param {number | null} selected @param {boolean} first @param {boolean} last
+ */
+function listItem(t, it, selected, first, last) {
+  return div().flex_none().px(LIST_PADDING).pt(first ? LIST_PADDING : 0).pb(last ? LIST_PADDING : 1).child(itemBody(t, it, selected, null));
 }
 
-/** @param {Theme} t @param {RowView} r @param {string} id @param {boolean} selected @param {Click} onClick @param {(() => unknown) | null} [onMenu] */
-function issueRow(t, r, id, selected, onClick, onMenu = null) {
-  return h_flex().id(id).flex_none().px(10).py(6).gap(8).items_start().rounded(7).cursor_pointer()
-    .when(onMenu !== null, (e) => e.on_mouse_down("right", () => onMenu?.()))
-    .when(selected, (e) => e.bg(t.selected)).hover((s) => s.bg(selected ? t.selected : t.hover)).on_click(onClick)
+/** @param {Theme} t @param {import("./model.js").ListItem} it @param {number | null} selected @param {Click | null} onClick */
+function itemBody(t, it, selected, onClick) {
+  return it.kind === "heading" ? heading(t, it.label) : issueRow(t, it.row, it.key, selected === it.row.number, onClick);
+}
+
+/** Pinned above the list, so its unknown wrapped height is not an item. It scrolls by itself past its cap. @param {Theme} t @param {string} text */
+function errorLine(t, text) {
+  return div().id("onedev-issues-error").flex_none().max_h(ERROR_MAX_HEIGHT).overflow_y_scroll().px(16).pt(10).text_size(11).text_color(t.ansi1).child(text);
+}
+
+/** @param {Theme} t @param {string} label */
+function heading(t, label) {
+  return div().flex_none().h(HEADING_HEIGHT).px(10).pt(8).pb(4).truncate().text_size(11).font_semibold().text_color(t.dim).child(displayText(label, 40));
+}
+
+/** @param {Theme} t @param {RowView} r @param {string} id @param {boolean} selected @param {Click | null} onClick */
+function issueRow(t, r, id, selected, onClick) {
+  return h_flex().id(id).flex_none().h(ROW_HEIGHT).px(10).py(6).gap(8).items_start().rounded(7).cursor_pointer()
+    .when(selected, (e) => e.bg(t.selected)).hover((s) => s.bg(selected ? t.selected : t.hover)).when(onClick !== null, (e) => e.on_click(onClick))
     .child(div().flex_none().w(40).text_color(t.dim).child(`#${r.number}`))
     .child(div().flex_1().min_w(0).line_height("20px").max_h(40).overflow_hidden().child(displayText(r.title, 200)))
     .child(div().flex_none().text_size(11).text_color(t.dim).child(displayText(r.state, 16)));

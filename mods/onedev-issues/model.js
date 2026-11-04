@@ -250,6 +250,22 @@ export function visibleRows(cache, prefs) {
 }
 
 /**
+ * One last-result slot for `visibleRows`. The cache object is replaced on every change, so its identity stands for its content.
+ * `selected` and `menu` change no order, so they are not part of the key.
+ * @returns {(cache: Cache, prefs: ViewPrefs) => import("./odev.js").IssueRow[]}
+ */
+export function memoVisibleRows() {
+  /** @type {{ cache: Cache, state: string | null, mine: boolean, sort: string, rows: import("./odev.js").IssueRow[] } | null} */
+  let last = null;
+  return (cache, prefs) => {
+    if (last && last.cache === cache && last.state === prefs.state && last.mine === prefs.mine && last.sort === prefs.sort) return last.rows;
+    const rows = visibleRows(cache, prefs);
+    last = { cache, state: prefs.state, mine: prefs.mine, sort: prefs.sort, rows };
+    return rows;
+  };
+}
+
+/**
  * @param {ViewPrefs} prefs @param {Cache} cache @param {number} number
  * @returns {ViewPrefs}
  */
@@ -258,6 +274,78 @@ export function selectRow(prefs, cache, number) {
   if (row) return { ...prefs, selected: number, state: row.state, mine: false };
   if (cache.known[String(number)]) return { ...prefs, selected: number };
   return prefs;
+}
+
+/**
+ * What a click on an item does to the view. A list row only selects: its tab and Mine stay, because the row is already in view.
+ * A mention row may be in another tab or outside Mine, so it goes through `selectRow`.
+ * @param {ViewPrefs} prefs @param {Cache} cache @param {{ kind: "mention" | "row", number: number }} item
+ * @returns {ViewPrefs}
+ */
+export function clickedPrefs(prefs, cache, item) {
+  return item.kind === "row" ? { ...prefs, selected: item.number } : selectRow(prefs, cache, item.number);
+}
+
+/**
+ * @typedef {{ key: string, kind: "heading", label: string }
+ *   | { key: string, kind: "mention" | "row", row: RowView }} ListItem
+ */
+
+/**
+ * Everything that scrolls in the panel, in order, each with a key that the list reports on a click.
+ * @param {{ mentions: RowView[], stateLabel: string, rows: RowView[] }} parts
+ * @returns {ListItem[]}
+ */
+export function listItems({ mentions, stateLabel, rows }) {
+  /** @type {ListItem[]} */
+  const items = [];
+  if (mentions.length > 0) {
+    items.push({ key: "heading-mentions", kind: "heading", label: "In this terminal" });
+    for (const row of mentions) items.push({ key: `mention-${row.number}`, kind: "mention", row });
+    items.push({ key: "heading-state", kind: "heading", label: stateLabel });
+  }
+  for (const row of rows) items.push({ key: `row-${row.number}`, kind: "row", row });
+  return items;
+}
+
+/** The stated heights of the list, in px at zoom 1. A row always has room for a two-line title. */
+export const ROW_HEIGHT = 52;
+export const HEADING_HEIGHT = 30;
+export const ITEM_GAP = 1;
+export const LIST_PADDING = 6;
+
+/**
+ * The height of each item, with the gap below it and the list's padding at both ends. A virtual list places items by these.
+ * @param {ListItem[]} items
+ * @returns {number[]}
+ */
+export function itemSizes(items) {
+  return items.map((it, i) => (it.kind === "heading" ? HEADING_HEIGHT : ROW_HEIGHT)
+    + (i === 0 ? LIST_PADDING : 0)
+    + (i === items.length - 1 ? LIST_PADDING : ITEM_GAP));
+}
+
+/**
+ * What the panel's body shows. The cache is null with no project, or when the config did not load.
+ * @param {{ project: OnedevProject | null, cache: Cache | null, prefs: ViewPrefs, status: StoreStatus, configError: string | null, contextError: string | null, rows: RowView[], mentions: RowView[] }} parts
+ * @returns {{ kind: "no-project" | "loading" | "no-match" | "list", error: string | null, items: ListItem[] }}
+ */
+export function panelBody({ project, cache, prefs, status, configError, contextError, rows, mentions }) {
+  return {
+    kind: configError ? (project ? "no-match" : "no-project") : bodyKind(project, cache, status, rows),
+    error: contextError ?? status.error ?? configError,
+    items: listItems({ mentions, stateLabel: (cache && effectiveState(cache, prefs)) ?? "Issues", rows }),
+  };
+}
+
+/**
+ * The one decode of an item key. A heading or a malformed key gives null.
+ * @param {unknown} key
+ * @returns {{ kind: "mention" | "row", number: number } | null}
+ */
+export function decodeItemKey(key) {
+  const m = typeof key === "string" ? /^(mention|row)-([1-9][0-9]{0,14})$/.exec(key) : null;
+  return m ? { kind: /** @type {"mention" | "row"} */ (m[1]), number: Number(m[2]) } : null;
 }
 
 /**
