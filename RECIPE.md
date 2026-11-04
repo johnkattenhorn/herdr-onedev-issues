@@ -12,7 +12,7 @@ This recipe is adapted from the `RECIPE.md` of [herdr-issues](https://github.com
 - **The panel**, in the side panel column as a card.
   - A 42px header: a green (`ansi2`) circle-dot icon, "Issues" semibold, the project path (`group/name`, 11px, `dim`, truncated, right-aligned) and a bordered "Refresh" button, or a spinner and "Syncing".
   - A control area: a segmented control with one segment per **state** the project's issues use, each with its count ("Open 177 | Closed 100"); a segmented "All | Mine"; and a sort button ("Newest ▼") that opens a row of sort choices: Newest, Oldest, Recently updated, Least recently updated, Most commented.
-  - The list: rows of `#number` (40px wide, `dim`), the title (wrapping, two lines at most) and the issue's state on the right. When the focused terminal mentions issues, an "In this terminal" heading comes first with those rows, then a heading for the list below.
+  - The list: rows of `#number` (a 40px pill coloured by the Priority field: Critical `ansi1`, Major `ansi3`, Normal `border`, Minor no fill and `dim` ink; a missing or unknown Priority is Normal), the title (wrapping, two lines at most) and the issue's state on the right. When the focused terminal mentions issues, an "In this terminal" heading comes first with those rows, then a heading for the list below.
   - Before any project has been seen: "No project yet" and "Focus a terminal inside a OneDev repository and its issues show up here."
 - **The issue dialog**, a large overlay:
   - A top bar: the project path, a Back button after following a link, an error if the last action failed, a spinner while loading, and Refresh, Copy and Open in browser buttons and a close button.

@@ -9,7 +9,7 @@ import * as model from "../mods/onedev-issues/model.js";
 import { verdict } from "./helpers.js";
 
 const {
-  beginCheck, bodyKind, slotShowsIssues, contextKey, endCheck, focusContext, mentionRows, parseChecks, parseCommand, parseContext, parsePrefs,
+  beginCheck, bodyKind, slotShowsIssues, contextKey, endCheck, focusContext, mentionRows, pillStyle, parseChecks, parseCommand, parseContext, parsePrefs,
   parseSpaces, readPanel, rememberProject, routeStep, selectRow, serializeChecks, visibleRows, withPanels, effectiveState,
   clickedPrefs, decodeItemKey, itemSizes, listItems, memoVisibleRows, panelBody,
 } = model;
@@ -313,9 +313,9 @@ test("selectRow: a known-only number selects without moving the tabs, and an unk
 test("mentionRows: cached row, then known, in scan order; misses and nulls are dropped; at most 8", () => {
   const c = cacheOf(R, { known: { 50: { number: 50, title: "k", state: "Open" }, 51: null } });
   assert.deepEqual(mentionRows(c, [4, 51, 50, 777, 1]), [
-    { number: 4, title: "d", state: "Open" },
-    { number: 50, title: "k", state: "Open" },
-    { number: 1, title: "a", state: "Open" },
+    { number: 4, title: "d", state: "Open", fields: null },
+    { number: 50, title: "k", state: "Open", fields: null },
+    { number: 1, title: "a", state: "Open", fields: null },
   ]);
   const many = cacheOf(Array.from({ length: 12 }, (_, i) => row(i + 1)));
   assert.equal(mentionRows(many, Array.from({ length: 12 }, (_, i) => i + 1)).length, 8);
@@ -486,4 +486,27 @@ test("memoVisibleRows: the same array when only selected or menu changed; a new 
   const f = memo(c2, prefs({ sort: "oldest", state: "Closed", mine: true }));
   assert.notEqual(f, e);
   assert.equal(memo(c2, prefs({ sort: "oldest", state: "Closed", mine: true, selected: 3 })), f);
+});
+
+test("pillStyle: each priority has its own pill; Minor has no fill", () => {
+  const of = (Priority) => pillStyle({ fields: { Priority } });
+  assert.deepEqual(of("Critical"), { fill: "ansi1", ink: "background" });
+  assert.deepEqual(of("Major"), { fill: "ansi3", ink: "background" });
+  assert.deepEqual(of("Normal"), { fill: "border", ink: "foreground" });
+  assert.deepEqual(of("Minor"), { fill: null, ink: "dim" });
+});
+
+test("pillStyle: a missing field, missing fields, an unknown or non-string Priority gives the Normal pill", () => {
+  const normal = pillStyle({ fields: { Priority: "Normal" } });
+  for (const row of [{}, { fields: null }, { fields: {} }, { fields: { Priority: null } }, { fields: { Priority: "Urgent" } }, { fields: { Priority: 3 } },
+    { fields: { Priority: ["Critical"] } }, { fields: { Priority: "critical" } }, { fields: { Priority: "toString" } }, { fields: "Critical" }, { fields: ["Critical"] }]) {
+    assert.deepEqual(pillStyle(row), normal, JSON.stringify(row));
+  }
+});
+
+test("mentionRows: a cached row keeps its fields; a known row has none", () => {
+  const c = cacheOf([row(4, { fields: { Priority: "Major" } })], { known: { 9: { number: 9, title: "K", state: "Open" } } });
+  const [a, b] = mentionRows(c, [4, 9]);
+  assert.equal(pillStyle(a).fill, "ansi3");
+  assert.equal(pillStyle(b).fill, "border");
 });

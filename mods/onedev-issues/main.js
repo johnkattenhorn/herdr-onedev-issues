@@ -5,7 +5,7 @@ import * as fs from "fs/promises";
 import { createOdev, loadConfig } from "./odev.js";
 import { SORTS, cacheFileName, createCaches, displayText, herdrIO, mentionScanner, stateTabs } from "./cache.js";
 import {
-  CONTEXT, HEADING_HEIGHT, LIST_PADDING, RECHECK, ROW_HEIGHT, beginCheck, clickedPrefs, decodeItemKey, effectiveState, endCheck, focusContext, isPanelShown, itemSizes,
+  CONTEXT, HEADING_HEIGHT, LIST_PADDING, RECHECK, ROW_HEIGHT, beginCheck, clickedPrefs, decodeItemKey, effectiveState, endCheck, focusContext, isPanelShown, itemSizes, pillStyle,
   memoVisibleRows, mentionRows, panelBody, parseChecks, parseCommand, parseContext, parsePrefs, parseSpaces, readPanel, rememberProject, routeStep, selectRow,
   serializeChecks, slotShowsIssues, withPanels,
 } from "./model.js";
@@ -445,9 +445,16 @@ function heading(t, label) {
 function issueRow(t, r, id, selected, onClick) {
   return h_flex().id(id).flex_none().h(ROW_HEIGHT).px(10).py(6).gap(8).items_start().rounded(7).cursor_pointer()
     .when(selected, (e) => e.bg(t.selected)).hover((s) => s.bg(selected ? t.selected : t.hover)).when(onClick !== null, (e) => e.on_click(onClick))
-    .child(div().flex_none().w(40).text_color(t.dim).child(`#${r.number}`))
+    .child(pill(t, r))
     .child(div().flex_1().min_w(0).line_height("20px").max_h(40).overflow_hidden().child(displayText(r.title, 200)))
     .child(div().flex_none().text_size(11).text_color(t.dim).child(displayText(r.state, 16)));
+}
+
+/** The issue number on a pill that is as high as a title line, so the row keeps its stated height. @param {Theme} t @param {RowView} r */
+function pill(t, r) {
+  const p = pillStyle(r);
+  return h_flex().flex_none().w(40).h(20).items_center().justify_center().rounded(4).text_size(12).text_color(t[p.ink])
+    .when(p.fill !== null, (e) => e.bg(t[/** @type {string} */ (p.fill)])).child(`#${r.number}`);
 }
 
 /** @param {Theme} t @param {EmptyKind | "list"} kind */

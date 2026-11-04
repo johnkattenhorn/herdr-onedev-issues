@@ -12,6 +12,7 @@ A [Herdr](https://herdr.dev) mod that lists the OneDev issues of the repository 
 - The panel follows the focused terminal. It reads the folder's `origin` remote, asks `odev` which OneDev project that is, and lists that project's issues. A space remembers its project, so a folder outside OneDev keeps the last one. A space that never had a project shows an empty state, never an error.
 - Issues show at once from a cache and refresh in the background. Switch between the states the project's issues use, show only your own, and sort five ways.
 - A `#123` or `team/app#123` that the terminal prints shows at the top of the list, under "In this terminal".
+- Each issue number sits on a pill coloured by the issue's Priority: red for Critical, amber for Major, grey for Normal, no fill for Minor. A row with no Priority shows grey.
 - Click an issue to open a dialog: the description, the comments and field changes as a timeline, the fields, assignees, links and pull requests. Write a comment (Ctrl+Enter posts), change the state, edit a field, or assign yourself. Every write goes through `odev`.
 - The mod never handles a OneDev token. `odev` does.
 

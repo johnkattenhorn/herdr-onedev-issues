@@ -42,7 +42,7 @@ import { SORTS, chooseView, displayText, stateTabs } from "./cache.js";
 
 /** @typedef {{ kind: "refresh" } | { kind: "open", number: number } | { kind: "focus" } | { kind: "unknown", name: string }} Command */
 
-/** @typedef {{ number: number, title: string, state: string }} RowView */
+/** @typedef {{ number: number, title: string, state: string, fields?: Record<string, unknown> | null }} RowView */
 
 export const CONTEXT = "onedev-issues.context";
 export const RECHECK = "onedev-issues.recheck";
@@ -308,6 +308,27 @@ export function listItems({ mentions, stateLabel, rows }) {
   return items;
 }
 
+/** @typedef {{ fill: string | null, ink: string }} PillStyle  Theme colour names: the pill's fill (null for none) and the number's ink. */
+
+/** @type {Record<string, PillStyle>} */
+const PILLS = {
+  Critical: { fill: "ansi1", ink: "background" },
+  Major: { fill: "ansi3", ink: "background" },
+  Normal: { fill: "border", ink: "foreground" },
+  Minor: { fill: null, ink: "dim" },
+};
+
+/**
+ * The pill behind an issue number, from the row's Priority field. A missing field, a non-string value or an unknown name gives the Normal pill.
+ * @param {{ fields?: unknown }} row
+ * @returns {PillStyle}
+ */
+export function pillStyle(row) {
+  const fields = isObject(row.fields) ? row.fields : null;
+  const name = fields?.Priority;
+  return typeof name === "string" && Object.hasOwn(PILLS, name) ? PILLS[name] : PILLS.Normal;
+}
+
 /** The stated heights of the list, in px at zoom 1. A row always has room for a two-line title. */
 export const ROW_HEIGHT = 52;
 export const HEADING_HEIGHT = 30;
@@ -357,7 +378,7 @@ export function mentionRows(cache, numbers) {
   const rows = [];
   for (const n of numbers) {
     const hit = cache.issues[String(n)] ?? cache.known[String(n)];
-    if (hit) rows.push({ number: hit.number, title: hit.title, state: hit.state });
+    if (hit) rows.push({ number: hit.number, title: hit.title, state: hit.state, fields: "fields" in hit ? hit.fields : null });
     if (rows.length >= 8) break;
   }
   return rows;
